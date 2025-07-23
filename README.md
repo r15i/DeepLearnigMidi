@@ -2,3 +2,10 @@
 Contributors:
 - Emilio Risi
 - Salvatore Civiello
+
+
+Datasets used:
+multiple gen: https://colinraffel.com/projects/lmd/
+
+only piano: https://magenta.tensorflow.org/datasets/maestro#v300
+
