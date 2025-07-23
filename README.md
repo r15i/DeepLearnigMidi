@@ -3,7 +3,6 @@ Contributors:
 - Emilio Risi
 - Salvatore Civiello
 
-let's try it
 
 
 Datasets used:
