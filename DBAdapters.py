@@ -79,7 +79,7 @@ class MaestroMIDIDataset(Dataset):
             # This represents a single bar of real melody from the training dataset.
             # Previous Bar Melody (2-D Condition): A binary matrix of shape h×w (128 MIDI notes × 16 time steps).
 
-            # TODO:
+            # TODO: MOVED to main.py
             # This is either a real melody bar from the dataset (e.g., the bar immediately preceding
             # X) or an all-zeros matrix if no prior context is provided (e.g., for the very first bar in a sequence).
 
@@ -87,9 +87,6 @@ class MaestroMIDIDataset(Dataset):
             # Chord Sequence (1-D Condition): A 13-dimensional vector. This represents the chord for the current bar,
             # with 12 dimensions for the key and 1 for major/minor type.
 
-            # NOTE:
-            # this can be probably be generated at training time
-            # Random Noise (z): A vector of random Gaussian noise of length 100.
 
             # Handle for the file
             midi_data = pretty_midi.PrettyMIDI(midi_path)
@@ -108,6 +105,7 @@ class MaestroMIDIDataset(Dataset):
             # Ensure the piano roll has enough time steps for one bar.
             # If not, pad or skip (depending on your dataset strategy).
             if full_piano_roll.shape[1] >= w:
+                # NOTE: placeholder to handle better 
                 # Take the first 'w' time steps for simplicity as one bar
                 bar_piano_roll = full_piano_roll[:, :w]
             else:
@@ -124,11 +122,12 @@ class MaestroMIDIDataset(Dataset):
             # So, the shape is (128, 16) for a single bar.
             processed_melody_tensor = torch.from_numpy(melody_matrix).float()
 
-            # NOTE: Placeholder, assume no prior bar for this sample all zero
+            # NOTE: to move to main.py
+            #Placeholder, assume no prior bar for this sample all zero
             # this is the previous bar, probably this can be easily implemented by
             # using a global variable that tracks the previusly used bar
             # if not it is needed to re retrive the current midi and previous each time
-            previous_bar_melody = torch.zeros((h, w)).float()
+            #previous_bar_melody = torch.zeros((h, w)).float()
 
             # NOTE: Placeholder, assuming random chord
             # Dummy chord condition (1-D condition).
@@ -144,7 +143,6 @@ class MaestroMIDIDataset(Dataset):
 
             sample = {
                 "real_melody_bar": processed_melody_tensor,  # X from p_data(X)
-                "previous_bar_melody_condition": previous_bar_melody,  # 2-D condition for Generator
                 "chord_condition": chord_condition,  # 1-D condition for Generator
             }
 

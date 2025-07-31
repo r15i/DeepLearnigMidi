@@ -30,6 +30,7 @@ my_dataset = dba.MaestroMIDIDataset(
 # for epoch in range(2):  # Example: 2 epochs
 #     print(f"--- Epoch {epoch + 1} ---")
 #     for i, batch in enumerate(data_loader):
+        
 #         features = batch["features"]
 #         labels = batch["label"]
 #         print(
@@ -38,7 +39,9 @@ my_dataset = dba.MaestroMIDIDataset(
 #         # print(f"Features:\n{features}")
 #         # print(f"Labels:\n{labels}")
 #         # In a real scenario, you would pass features and labels to your model
-#         # outputs = model(features)
+#         complet_feature = prevFeatur, featur
+#         # outputs = model(complete_feature )
+            prevfeatur = feature
 #         # loss = criterion(outputs, labels)
 #         # loss.backward()
 #         # optimizer.step()
