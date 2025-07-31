@@ -3,7 +3,8 @@ from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import numpy as np
 import os  # To join paths
-
+import pretty_midi  # For MIDI file processing
+import matplotlib.pyplot as plt
 
 # NOTE: this class rappresent how we parse the datesets
 
@@ -62,37 +63,90 @@ class MaestroMIDIDataset(Dataset):
         midi_path = self.midi_file_paths[idx]
 
         try:
-            import pretty_midi
-            # NOTE:--- MIDI Loading and Processing Placeholder ---
-            # THIS IS A PLACEHOLDER
             # this will be called to actually retrive the data to serve to the network
             # so it will be used to retrive the de file midi , format it and give it to the network
 
-            # NOTE: START PLACEHOLDER
-            # This is where you'll load the MIDI file and convert it into a
-            # numerical representation (e.g., piano roll, sequence of events).
-            # The exact representation depends on your generative model architecture.
-            # Example: Using pretty_midi to get a piano roll
-            # This is a simple example; you'll likely need more sophisticated
-            # processing (e.g., fixed length sequences, quantization).
+            # For MidiNet, the input is a 2-D matrix representing notes over time in a bar.
+            # The dimensions are h (number of MIDI notes, 128 in their implementation)
+            # by w (number of time steps in a bar, 16 for sixteenth notes).
+
+            # MidiNet generates melodies one bar after another.
+            # When conditioning on a previous bar's melody, that melody is also an h-by-w matrix.
+            # When conditioning on a chord sequence, a 13-dimensional vector is used per bar.
+
+            # TODO:
+            # Real Melody Bar (X): A binary matrix of shape h×w (128 MIDI notes × 16 time steps).
+            # This represents a single bar of real melody from the training dataset.
+            # Previous Bar Melody (2-D Condition): A binary matrix of shape h×w (128 MIDI notes × 16 time steps).
+
+            # TODO:
+            # This is either a real melody bar from the dataset (e.g., the bar immediately preceding
+            # X) or an all-zeros matrix if no prior context is provided (e.g., for the very first bar in a sequence).
+
+            # TODO:
+            # Chord Sequence (1-D Condition): A 13-dimensional vector. This represents the chord for the current bar,
+            # with 12 dimensions for the key and 1 for major/minor type.
+
+            # NOTE:
+            # this can be probably be generated at training time
+            # Random Noise (z): A vector of random Gaussian noise of length 100.
+
+            # Handle for the file
             midi_data = pretty_midi.PrettyMIDI(midi_path)
-            # Get a piano roll, e.g., for C major scale at 120 bpm, 1 second long
-            # 'fs' is the frames per second. Higher fs means more detailed time resolution.
-            # 'piano_roll' will be a (128, num_frames) numpy array (pitch x time)
-            # You might want to sum across instruments or select a specific one.
-            piano_roll = midi_data.get_piano_roll(fs=100)  # 100 frames per second
-            # Normalize or scale the piano roll values if needed
-            # For generative models, values are often between 0 and 1 or -1 and 1
-            piano_roll = piano_roll / 127.0  # Assuming velocities up to 127
-            # Convert to PyTorch tensor. Generative models often expect (batch, channels, height, width)
-            # or (batch, sequence_length, features)
-            # For piano roll (pitch x time), it could be (1, pitch, time) if treating pitch as a channel
-            # or (time, pitch) if treating time as sequence length.
-            # Let's assume (pitch, time) and add a batch dimension later.
-            processed_midi_tensor = torch.from_numpy(piano_roll).float()
-            # For generative models, often the input is also the "output" (reconstruction, generation target)
-            # So, you might just return the processed_midi_tensor itself.
-            sample = {"midi_data": processed_midi_tensor}
+            h = 128  # Number of MIDI notes
+            w = 16  # Number of time steps in a bar (sixteenth notes)
+
+            # NOTE: need to account for the tempo based on the midi
+            # Let's assume a bar duration (e.g., 4 beats at 120bpm = 2 seconds).
+            # fs = w / bar_duration (e.g., 16 time steps / 2 seconds = 8 fs)
+            # fs (frames per second) = w / bar_duration_in_seconds = 16 / 2 = 8
+            fs_for_bar = 8  # This 'fs' is conceptual for a single bar's representation.
+            # fs (frames per second): This argument controls the temporal resolution of the piano roll.
+            # fs=8 --> 8 slices per sec
+            full_piano_roll = midi_data.get_piano_roll(fs=fs_for_bar)
+
+            # Ensure the piano roll has enough time steps for one bar.
+            # If not, pad or skip (depending on your dataset strategy).
+            if full_piano_roll.shape[1] >= w:
+                # Take the first 'w' time steps for simplicity as one bar
+                bar_piano_roll = full_piano_roll[:, :w]
+            else:
+                # Pad with zeros if the MIDI is shorter than a bar (unlikely for full songs)
+                # Or, handle this by returning None and filtering in DataLoader
+                bar_piano_roll = np.zeros((h, w))
+                bar_piano_roll[:, : full_piano_roll.shape[1]] = full_piano_roll
+
+            # Convert to binary representation as MidiNet often uses binary matrices.
+            # (Note: velocity information is neglected for simplicity in their implementation).
+            melody_matrix = (bar_piano_roll > 0).astype(np.float32)  # Binary (0 or 1)
+            # Convert to PyTorch tensor. MidiNet uses a 2-D matrix for notes and time steps.
+            # It will be h-by-w.
+            # So, the shape is (128, 16) for a single bar.
+            processed_melody_tensor = torch.from_numpy(melody_matrix).float()
+
+            # NOTE: Placeholder, assume no prior bar for this sample all zero
+            # this is the previous bar, probably this can be easily implemented by
+            # using a global variable that tracks the previusly used bar
+            # if not it is needed to re retrive the current midi and previous each time
+            previous_bar_melody = torch.zeros((h, w)).float()
+
+            # NOTE: Placeholder, assuming random chord
+            # Dummy chord condition (1-D condition).
+            # random 13-dimensional vector.
+            chord_condition = torch.randint(
+                0, 2, (13,)
+            ).float()  # Random binary chord (major/minor, key)
+
+            # The 'sample' returned by __getitem__ should contain everything needed for a single training step.
+            # For MidiNet, this typically involves:
+            # 1. A real melody bar (X) to train the discriminator.
+            # 2. Conditional information (previous_bar_melody, chord_condition) for the generator.
+
+            sample = {
+                "real_melody_bar": processed_melody_tensor,  # X from p_data(X)
+                "previous_bar_melody_condition": previous_bar_melody,  # 2-D condition for Generator
+                "chord_condition": chord_condition,  # 1-D condition for Generator
+            }
 
             if self.transform:
                 sample = self.transform(sample)
@@ -121,3 +175,116 @@ if __name__ == "__main__":
     my_dataset = dba.MaestroMIDIDataset(
         csv_file=csv_file_path, midi_base_path=midi_base_path
     )
+
+    batch_size = 4
+    shuffle = True
+    num_workers = 0
+
+    data_loader = DataLoader(
+        my_dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+    )
+
+    plot_output_dir = "debug_plots"
+    os.makedirs(plot_output_dir, exist_ok=True)
+
+    print("\nIterating through DataLoader:")
+    for epoch in range(1):
+        print(f"--- Epoch {epoch + 1} ---")
+        for i, batch in enumerate(data_loader):
+            if batch is None:
+                print(f"Batch {i + 1}: Skipped due to error in loading a MIDI file.")
+                continue
+
+            real_melody_bar = batch["real_melody_bar"]
+            previous_bar_melody_condition = batch["previous_bar_melody_condition"]
+            chord_condition = batch["chord_condition"]
+
+            print(f"Batch {i + 1}:")
+            print(f"  Real Melody Bar shape: {real_melody_bar.shape}")
+            print(
+                f"  Previous Bar Melody Condition shape: {previous_bar_melody_condition.shape}"
+            )
+            print(f"  Chord Condition shape: {chord_condition.shape}")
+
+            # --- ADDING RAW MATRIX PRINTING FOR DEBUGGING ---
+            print(
+                f"\n--- Raw Real Melody Bar Matrix (first sample in batch {i + 1}) ---"
+            )
+            # Convert to NumPy and print the array
+            print(real_melody_bar[0].squeeze().cpu().numpy())
+            print(f"----------------------------------------------------\n")
+
+            if np.any(previous_bar_melody_condition[0].squeeze().cpu().numpy()):
+                print(
+                    f"\n--- Raw Previous Bar Melody Condition Matrix (first sample in batch {i + 1}) ---"
+                )
+                print(previous_bar_melody_condition[0].squeeze().cpu().numpy())
+                print(f"----------------------------------------------------\n")
+
+            print(
+                f"\n--- Raw Chord Condition Vector (first sample in batch {i + 1}) ---"
+            )
+            print(chord_condition[0].squeeze().cpu().numpy())
+            print(f"----------------------------------------------------\n")
+
+            # --- Plotting and Saving Images (as before, these ARE matrix plots) ---
+
+            melody_to_plot = real_melody_bar[0].squeeze().cpu().numpy()
+            fig1 = plt.figure(figsize=(8, 4))
+            plt.imshow(melody_to_plot, aspect="auto", origin="lower", cmap="binary")
+            plt.title(
+                f"Epoch {epoch + 1}, Batch {i + 1}: Real Melody Bar (First Sample)"
+            )
+            plt.xlabel("Time Steps (w=16)")
+            plt.ylabel("MIDI Notes (h=128)")
+            plt.colorbar(label="Note On (1) / Note Off (0)")
+            fig1.savefig(
+                os.path.join(
+                    plot_output_dir,
+                    f"epoch{epoch + 1}_batch{i + 1}_real_melody_plot.png",
+                )
+            )
+            plt.close(fig1)
+
+            condition_to_plot = previous_bar_melody_condition[0].squeeze().cpu().numpy()
+            if np.any(condition_to_plot):
+                fig2 = plt.figure(figsize=(8, 4))
+                plt.imshow(
+                    condition_to_plot, aspect="auto", origin="lower", cmap="binary"
+                )
+                plt.title(
+                    f"Epoch {epoch + 1}, Batch {i + 1}: Previous Bar Melody Condition (First Sample)"
+                )
+                plt.xlabel("Time Steps (w=16)")
+                plt.ylabel("MIDI Notes (h=128)")
+                plt.colorbar(label="Note On (1) / Note Off (0)")
+                fig2.savefig(
+                    os.path.join(
+                        plot_output_dir,
+                        f"epoch{epoch + 1}_batch{i + 1}_prev_bar_condition_plot.png",
+                    )
+                )
+                plt.close(fig2)
+
+            chord_to_plot = chord_condition[0].squeeze().cpu().numpy()
+            fig3 = plt.figure(figsize=(6, 2))
+            plt.bar(range(len(chord_to_plot)), chord_to_plot)
+            plt.title(
+                f"Epoch {epoch + 1}, Batch {i + 1}: Chord Condition (First Sample)"
+            )
+            plt.xlabel("Chord Dimension")
+            plt.ylabel("Value")
+            plt.xticks(range(13), [f"Dim {j}" for j in range(12)] + ["Type"])
+            fig3.savefig(
+                os.path.join(
+                    plot_output_dir,
+                    f"epoch{epoch + 1}_batch{i + 1}_chord_condition_plot.png",
+                )
+            )
+            plt.close(fig3)
+
+            if i >= 1:
+                break
