@@ -55,7 +55,13 @@ netG = md.Generator(pitch_range=w)
 netD = md.Discriminator(pitch_range=w)
 netC = md.Conditioner(pitch_range=w)
 
+
 # --- Loss functions and Optimizers ---
+# Directly uses the optimized, built-in PyTorch loss functions:
+#         nn.BCEWithLogitsLoss()
+#         nn.MSELoss()
+# Second Script (Custom Wrappers): Wraps the standard PyTorch functions
+# inside its own custom functions (sigmoid_cross_entropy_with_logits, l2_loss, lrelu).
 criterion_adv = nn.BCEWithLogitsLoss()  # For adversarial loss (more stable)
 criterion_l2 = nn.MSELoss()  # For L2 feature matching losses
 
@@ -177,11 +183,7 @@ for epoch in range(num_epochs):
     # Save generated image samples for inspection
     with torch.no_grad():
         conditioner_output_fixed = netC(previous_bar_melody_condition)
-        fake_samples = (
-            netG(current_fixed_noise, conditioner_output_fixed, chord_condition)
-            .detach()
-            .cpu()
-        )
+        fake_samples = netG(pitch_range=w).detach().cpu()
     vutils.save_image(
         fake_samples,
         f"{output_dir}/fake_samples_epoch_{epoch + 1:03d}.png",
