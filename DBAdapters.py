@@ -9,6 +9,8 @@ from collections import defaultdict
 
 
 # eager loading implementation
+# TODO: probably a can turn the float32 into a binary at runtime to spare space in memory
+# TODO: understand better midi to be able to split it better
 class MaestroMIDIDataset(Dataset):
     def __init__(
         self,
@@ -76,7 +78,7 @@ class MaestroMIDIDataset(Dataset):
                 # NOTE:: need to tune the timings
                 # We use a high temporal resolution (fs) to accurately capture note timings.
                 piano_roll = midi_data.get_piano_roll(fs=100)
-                # Binarize the piano roll (we only care if a note is on or off)
+                # Binarize the piano roll (we only care if a note is on or off)jjj
                 piano_roll_binary = (piano_roll > 0).astype(np.float32)
 
                 # --- 3. Slice the piano roll into bars and create samples ---
