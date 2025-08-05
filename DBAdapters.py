@@ -124,6 +124,8 @@ class MaestroMIDIDatasetLazy(Dataset):
             # 3. Slice and resample the CURRENT bar (relative to tempo )
             # Gets the start and end timestamps for the specific bar we need,
             # identified by bar_idx.
+            # NOTE: this make an assumption on the first bar , probably would be better to take an average
+            # over all
             start_time = bar_times[bar_idx]
             end_time = bar_times[bar_idx + 1]
 

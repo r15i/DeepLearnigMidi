@@ -1,0 +1,18 @@
+# Version control
+# .git/
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+# Large data and output directories
+# dataset/
+debug_output/
+training_output/
+testing_output/
+midi-visualization/
+# IDE / Editor specific
+.idea/
+.vscode/
+*.swp

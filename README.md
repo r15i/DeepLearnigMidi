@@ -5,7 +5,9 @@ Contributors:
 
 (done)          Fase 1 : reproduce cnn paper model 1 and 2             
 [x]     25/07   Planning 
-[ ]     28/07   Loading data logic and dataset handling and cleaning
+[-]     28/07   Loading data logic and dataset handling and cleaning
+        TODO:    make a midi visualizer 
+        TODO:    implement cleaning of single samples 
 [ ]     31/07   Gan implementation (Generator , Discriminator, Conditioner)(hopefully faster using the code from the repo )
 [ ]     13/08   Join all the networks to make complete Gan Training
 [ ]     18/08   Start collection of data for the teacher and varius tests
