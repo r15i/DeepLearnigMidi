@@ -34,6 +34,12 @@ help:
 	@echo "Configuration:"
 	@echo "  - Edit REMOTE_USER, REMOTE_HOST, and REMOTE_BASE_PATH in the Makefile."
 
+run:	#TODO: add tee
+	time python main.py >> out.log
+
+run-no-logs:
+	time python main.py 
+
 sync:
 	@echo ">>> Synchronizing project to $(REMOTE_DEST)"
 	@echo ">>> Excluding files listed in $(EXCLUDE_FILE)"
