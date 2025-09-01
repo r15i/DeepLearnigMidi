@@ -1,0 +1,15 @@
+# Data handling and numerical operations
+numpy
+pandas
+# MIDI file processing
+pretty_midi
+mido
+# Plotting and visualization
+matplotlib
+
+# NOTE: torch and torchvision are installed separately below
+# to ensure correct CUDA version matching.
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+torch 
+torchvision 
+torchaudio 
