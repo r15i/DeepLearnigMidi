@@ -25,36 +25,32 @@ class ConvVAE(nn.Module):
         # Encoder convs (input B,1,28,28)
         self.enc_conv = nn.Sequential(
             # 1 immagine a 32 (32 filtri qu)
-            nn.Conv2d(1, 32, 4, 2, 1),  # -> 14x14
+            nn.Conv2d(1, 32, 4, 2, 1),  # -> (32, 64, 8)
             nn.ReLU(True),
-            nn.Conv2d(32, 64, 4, 2, 1),  # -> 7x7
+            nn.Conv2d(32, 64, 4, 2, 1),  # -> (64, 32, 4)
             nn.ReLU(True),
-            nn.Conv2d(64, 128, 4, 2, 1),  # -> ~3x3
+            nn.Conv2d(64, 128, 4, 2, 1),  # -> (128, 16, 2)
             nn.ReLU(True),
         )
+        # dimension final feature map = (128, 16, 2)
         self._enc_out_channels = 128
-        self._enc_feat_size = 3  # finale spaziale (per 28x28 input con i layer sopra)
-        self.fc_mu = nn.Linear(
-            self._enc_out_channels * self._enc_feat_size * self._enc_feat_size,
-            latent_dim,
-        )
-        self.fc_logvar = nn.Linear(
-            self._enc_out_channels * self._enc_feat_size * self._enc_feat_size,
-            latent_dim,
-        )
+        self._enc_feat_h = 16
+        self._enc_feat_w = 2
+        enc_out_dim = self._enc_out_channels * self._enc_feat_h * self._enc_feat_w
+        
+        # layer fully connected -> mu e logvar
+        self.fc_mu = nn.Linear(enc_out_dim, latent_dim)
+        self.fc_logvar = nn.Linear(enc_out_dim, latent_dim)
 
         # Decoder
-        self.fc_dec = nn.Linear(
-            latent_dim,
-            self._enc_out_channels * self._enc_feat_size * self._enc_feat_size,
-        )
+        self.fc_dec = nn.Linear( latent_dim, enc_out_dim)
         self.dec_conv = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 4, 2, 1),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1), # -> (64, 32, 4)
             nn.ReLU(True),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1), # -> (32, 64, 8)
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, 1, 4, 2, 1),
-            # poi crop/interpolate a 28x28
+            nn.ConvTranspose2d(32, 1, 4, 2, 1), # -> (1, 128, 16)
+            
         )
 
     def encode(self, x):
@@ -73,11 +69,11 @@ class ConvVAE(nn.Module):
     def decode(self, z):
         h = self.fc_dec(z)
         B = h.shape[0]
-        h = h.view(B, self._enc_out_channels, self._enc_feat_size, self._enc_feat_size)
+        h = h.view(B, self._enc_out_channels, self._enc_feat_h, self._enc_feat_w)
         x_logits = self.dec_conv(h)
-        x_logits = F.interpolate(
-            x_logits, size=(28, 28), mode="bilinear", align_corners=False
-        )
+        # x_logits = F.interpolate(
+        #     x_logits, size=(28, 28), mode="bilinear", align_corners=False
+        # )  Non serve interpolare: il modello è scritto in modo che l'output abbia la stessa dimensione dell'input
         return x_logits
 
     def forward(self, x):
@@ -88,7 +84,7 @@ class ConvVAE(nn.Module):
 
 
 def vae_loss(x, x_logits, mu, logvar):
-    # recon è negativo
+    # BCE: because piano rolls are binary
     recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction="sum")
     var = logvar.exp()
     # slide 67 autoencoder
