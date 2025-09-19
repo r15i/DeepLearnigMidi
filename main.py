@@ -33,10 +33,9 @@ w = 16  # Time steps (width)
 
 
 # NOTE added for variational autoencoders
-
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = md.ConvVAE(latent_dim=16).to(device)
+model = md.ConvVAE(latent_dim=32).to(device)
+
 optimiser = optim.Adam(model.parameters(), lr=1e-3)
 
 transform = transforms.Compose([transforms.ToTensor()])  # MNIST in [0,1]
@@ -49,6 +48,9 @@ for epoch in range(1, 11):
     for xb, _ in loader:
         xb = xb.to(device)
         x_logits, mu, logvar = model(xb)
+        # recon  : termine ricostruttivo (similiarita alle immagini )
+        # kl : kulaback regolarizzazione (gaussian regularizz)
+        # kl tende a 0 , decode ignores the prior on the decodning
         loss, recon, kl = md.vae_loss(xb, x_logits, mu, logvar)
         optimiser.zero_grad()
         loss.backward()
@@ -64,7 +66,6 @@ with torch.no_grad():
     samples = torch.sigmoid(logits)  # in [0,1]
     # ora samples è (64,1,28,28) pronta per visualizzare/salvare
 
-exit()
 
 # --- Dataset and DataLoader ---
 my_dataset = dba.MaestroMIDIDataset(
@@ -74,6 +75,8 @@ data_loader = DataLoader(
     my_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True
 )
 
+
+exit()
 # ==============================================================================
 # 2. Model, Optimizers, and Loss Functions
 # ==============================================================================

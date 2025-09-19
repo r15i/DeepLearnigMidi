@@ -24,6 +24,7 @@ class ConvVAE(nn.Module):
         self.latent_dim = latent_dim
         # Encoder convs (input B,1,28,28)
         self.enc_conv = nn.Sequential(
+            # 1 immagine a 32 (32 filtri qu)
             nn.Conv2d(1, 32, 4, 2, 1),  # -> 14x14
             nn.ReLU(True),
             nn.Conv2d(32, 64, 4, 2, 1),  # -> 7x7
@@ -87,7 +88,9 @@ class ConvVAE(nn.Module):
 
 
 def vae_loss(x, x_logits, mu, logvar):
+    # recon è negativo
     recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction="sum")
     var = logvar.exp()
+    # slide 67 autoencoder
     kl = 0.5 * torch.sum(mu.pow(2) + var - logvar - 1.0)
     return recon_loss + kl, recon_loss, kl
