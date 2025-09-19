@@ -7,6 +7,10 @@ import numpy as np
 import os
 import torchvision.utils as vutils
 
+# dataset MNIST (esempio), training loop minimale
+from torchvision import datasets, transforms
+
+
 # --- Assumed Local Imports (User's files) ---
 import DBAdapters as dba
 import models as md
@@ -25,13 +29,42 @@ os.makedirs(os.path.join(output_dir, "models"), exist_ok=True)
 # --- Hyperparameters ---
 h = 128  # MIDI notes (height)
 w = 16  # Time steps (width)
-noise_dim = 100
-n_filters = 256
-batch_size = 32
-lr = 0.0002
-num_epochs = 20
-fm_l2_weight = 0.1  # Feature matching L2 loss weight
-mean_img_l2_weight = 0.01  # Mean image L2 loss weight
+# noise_dim = 100  TBD for noise
+
+
+# NOTE added for variational autoencoders
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = md.ConvVAE(latent_dim=16).to(device)
+optimiser = optim.Adam(model.parameters(), lr=1e-3)
+
+transform = transforms.Compose([transforms.ToTensor()])  # MNIST in [0,1]
+train_ds = datasets.MNIST(root=".", train=True, download=True, transform=transform)
+loader = DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=2)
+
+for epoch in range(1, 11):
+    model.train()
+    total_loss = 0.0
+    for xb, _ in loader:
+        xb = xb.to(device)
+        x_logits, mu, logvar = model(xb)
+        loss, recon, kl = md.vae_loss(xb, x_logits, mu, logvar)
+        optimiser.zero_grad()
+        loss.backward()
+        optimiser.step()
+        total_loss += loss.item()
+    print(f"Epoch {epoch}  avg loss per batch: {total_loss / len(loader):.2f}")
+
+
+model.eval()
+with torch.no_grad():
+    z = torch.randn(64, model.latent_dim).to(device)  # sample from N(0,I)
+    logits = model.decode(z)
+    samples = torch.sigmoid(logits)  # in [0,1]
+    # ora samples è (64,1,28,28) pronta per visualizzare/salvare
+
+exit()
 
 # --- Dataset and DataLoader ---
 my_dataset = dba.MaestroMIDIDataset(
@@ -51,9 +84,9 @@ data_loader = DataLoader(
 # class to support this.
 
 # --- Instantiate the models ---
-netG = md.Generator(pitch_range=w)
-netD = md.Discriminator(pitch_range=w)
-netC = md.Conditioner(pitch_range=w)
+# netG = md.Generator(pitch_range=w)
+# netD = md.Discriminator(pitch_range=w)
+# netC = md.Conditioner(pitch_range=w)
 
 
 # --- Loss functions and Optimizers ---
@@ -65,17 +98,17 @@ netC = md.Conditioner(pitch_range=w)
 criterion_adv = nn.BCEWithLogitsLoss()  # For adversarial loss (more stable)
 criterion_l2 = nn.MSELoss()  # For L2 feature matching losses
 
-optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
-optimizerG = optim.Adam(
-    list(netG.parameters()) + list(netC.parameters()), lr=lr, betas=(0.5, 0.999)
-)
+# optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
+# optimizerG = optim.Adam(
+#     list(netG.parameters()) + list(netC.parameters()), lr=lr, betas=(0.5, 0.999)
+# )
 
 # --- Move to GPU if available ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
-netG.to(device)
-netD.to(device)
-netC.to(device)
+# netG.to(device)
+# netD.to(device)
+# netC.to(device)
 
 # ==============================================================================
 # 3. Training Loop
@@ -96,103 +129,16 @@ for epoch in range(num_epochs):
         real_melody_bar = batch["real_melody_bar"].to(device)
         chord_condition = batch["chord_condition"].to(device)
 
-        # Ensure batch size consistency, especially for the last batch
-        current_batch_size = real_melody_bar.size(0)
-        if current_batch_size != batch_size:
-            previous_bar_melody_condition = previous_bar_melody_condition[
-                :current_batch_size
-            ]
-            current_fixed_noise = fixed_noise[:current_batch_size]
-        else:
-            current_fixed_noise = fixed_noise
-
-        real_melody_bar = real_melody_bar.unsqueeze(1)  # Add channel dimension
-
-        ############################
-        # (1) Update Discriminator
-        ############################
-        netD.zero_grad()
-
-        # --- Train with real batch ---
-        label_real = torch.full(
-            (current_batch_size,), 0.9, dtype=torch.float, device=device
-        )  # One-sided label smoothing
-        D_logits_real, fm_real = netD(real_melody_bar)
-        errD_real = criterion_adv(D_logits_real, label_real)
-        errD_real.backward(retain_graph=True)  # Retain graph to use fm_real later
-        D_x = torch.sigmoid(D_logits_real).mean().item()
-
-        # --- Train with fake batch ---
-        noise = torch.randn(current_batch_size, noise_dim, device=device)
-        conditioner_output = netC(previous_bar_melody_condition)
-        fake_melody_bar = netG(noise, conditioner_output, chord_condition)
-
-        label_fake = torch.full(
-            (current_batch_size,), 0.0, dtype=torch.float, device=device
-        )
-        D_logits_fake, _ = netD(fake_melody_bar.detach())
-        errD_fake = criterion_adv(D_logits_fake, label_fake)
-        errD_fake.backward()
-
-        errD = errD_real + errD_fake
-        optimizerD.step()
-        D_G_z1 = torch.sigmoid(D_logits_fake).mean().item()
-
-        ####################################
-        # (2) Update Generator & Conditioner
-        ####################################
-        netG.zero_grad()
-        netC.zero_grad()
-
-        # Generator wants D to output 1 for its fakes
-        label_g = torch.full(
-            (current_batch_size,), 1.0, dtype=torch.float, device=device
-        )
-        D_logits_g, fm_fake = netD(fake_melody_bar)
-
-        # --- Calculate Generator Losses ---
-        errG_adv = criterion_adv(D_logits_g, label_g)
-        errG_fm_l2 = (
-            criterion_l2(torch.mean(fm_fake, 0), torch.mean(fm_real, 0)) * fm_l2_weight
-        )
-        errG_mean_img_l2 = (
-            criterion_l2(torch.mean(fake_melody_bar, 0), torch.mean(real_melody_bar, 0))
-            * mean_img_l2_weight
-        )
-
-        # --- Total Generator Loss ---
-        errG = errG_adv + errG_fm_l2 + errG_mean_img_l2
-        errG.backward()
-        optimizerG.step()
-        D_G_z2 = torch.sigmoid(D_logits_g).mean().item()
-
-        # --- Update previous bar condition for the next iteration ---
-        previous_bar_melody_condition = real_melody_bar.detach().clone()
-
         # --- Log to console ---
         if i % 100 == 0:
             print(
                 f"[{epoch + 1}/{num_epochs}][{i}/{len(data_loader)}] | "
-                f"Loss_D: {errD.item():.4f} | Loss_G: {errG.item():.4f} | "
-                f"D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} -> {D_G_z2:.4f}"
+                # f"Loss_D: {errD.item():.4f} | Loss_G: {errG.item():.4f} | "
+                # f"D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} -> {D_G_z2:.4f}"
             )
 
     # --- End of Epoch ---
     print(f"\n===> Epoch {epoch + 1} Complete\n")
 
-    # Save generated image samples for inspection
-    with torch.no_grad():
-        conditioner_output_fixed = netC(previous_bar_melody_condition)
-        fake_samples = netG(pitch_range=w).detach().cpu()
-    vutils.save_image(
-        fake_samples,
-        f"{output_dir}/fake_samples_epoch_{epoch + 1:03d}.png",
-        normalize=True,
-    )
-
-    # Save model checkpoints
-    torch.save(netG.state_dict(), f"{output_dir}/models/netG_epoch_{epoch + 1}.pth")
-    torch.save(netD.state_dict(), f"{output_dir}/models/netD_epoch_{epoch + 1}.pth")
-    torch.save(netC.state_dict(), f"{output_dir}/models/netC_epoch_{epoch + 1}.pth")
 
 print("Training finished.")
