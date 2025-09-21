@@ -7,6 +7,27 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import re
 import random
+import argparse  # Import the argparse library
+
+
+parser = argparse.ArgumentParser(
+    description="Preprocess the MAESTRO MIDI dataset into piano roll tensors.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
+parser.add_argument(
+    "--limit",
+    type=int,
+    default=None,
+    help="Limit processing to the first N files. Processes all files by default.",
+)
+parser.add_argument(
+    "--sf",
+    type=int,
+    default=20,
+    help="Sampling frequency for the piano roll in Hz.",
+)
+args = parser.parse_args()
+
 
 # ==============================================================================
 # 1. Configuration (Unchanged)
@@ -14,7 +35,8 @@ import random
 CSV_FILE = "./dataset/MAESTRO_Dataset/maestro-v3.0.0.csv"
 MIDI_ROOT = "./dataset/MAESTRO_Dataset/maestro-v3.0.0"
 PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"
-SAMPLING_FREQUENCY = 30
+SAMPLING_FREQUENCY = args.sf
+TEST_LIMIT = args.limit
 SEQUENCE_LENGTH = 16
 PITCH_RANGE = 128
 
@@ -183,6 +205,7 @@ def visualize_reconstruction(
 # ==============================================================================
 # 4. & 5. (Unchanged)
 # ==============================================================================
+# TODO: add the possibility to select a specific segment
 def run_random_visualization(limit=None):
     # This function is the same as the last version
     print("\n--- Running Random Visualization ---")
@@ -230,6 +253,9 @@ def run_random_visualization(limit=None):
 
 
 if __name__ == "__main__":
-    TEST_LIMIT = 1
+    if TEST_LIMIT == None:
+        print(f"Prosessing : ALL files at {SAMPLING_FREQUENCY} per second ")
+    else:
+        print(f"Proscessing : {TEST_LIMIT} files at {SAMPLING_FREQUENCY} per second ")
     preprocess_and_save_dataset(limit=TEST_LIMIT)
     run_random_visualization(limit=TEST_LIMIT)
