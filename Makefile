@@ -25,8 +25,8 @@ TMUX_SESSION_NAME := preprocessing
 RSYNC_FLAGS := -avzh --delete --progress
 
 # --- Preprocessing Configuration ---
-LIMIT ?= None
-SF ?= 100
+LIMIT ?= 20  
+SF ?= 30
 
 .PHONY: help setup sync preprocess attach kill-session
 
@@ -53,6 +53,22 @@ sync:
 	@echo ">>> Synchronizing project to $(REMOTE_DEST)"
 	rsync $(RSYNC_FLAGS) --exclude-from=$(EXCLUDE_FILE) ./ $(REMOTE_DEST)
 	@echo ">>> Synchronization complete."
+
+preprocess_local: 
+	rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
+	rm -f preprocess.log
+	time .venv/bin/python preprocess_maestro.py  --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
+	feh reconstruction_verification.png
+	du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
+preprocess_test: sync
+	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
+	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
+		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
+		rm -rf $(REMOTE_PROCESSED_DIR) && mkdir -p $(REMOTE_PROCESSED_DIR);\
+		rm preprocess.log;\
+		time .venv/bin/python preprocess_maestro.py  --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log '"
+	@echo ">>> Job started successfully on remote server."
+	@echo ">>> To view progress, run: make attach"
 
 preprocess: sync
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."

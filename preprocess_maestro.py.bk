@@ -7,6 +7,27 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import re
 import random
+import argparse  # Import the argparse library
+
+
+parser = argparse.ArgumentParser(
+    description="Preprocess the MAESTRO MIDI dataset into piano roll tensors.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+)
+parser.add_argument(
+    "--limit",
+    type=int,
+    default=None,
+    help="Limit processing to the first N files. Processes all files by default.",
+)
+parser.add_argument(
+    "--sf",
+    type=int,
+    default=20,
+    help="Sampling frequency for the piano roll in Hz.",
+)
+args = parser.parse_args()
+
 
 # ==============================================================================
 # 1. Configuration (Unchanged)
@@ -14,7 +35,8 @@ import random
 CSV_FILE = "./dataset/MAESTRO_Dataset/maestro-v3.0.0.csv"
 MIDI_ROOT = "./dataset/MAESTRO_Dataset/maestro-v3.0.0"
 PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"
-SAMPLING_FREQUENCY = 30
+SAMPLING_FREQUENCY = args.sf
+TEST_LIMIT = args.limit
 SEQUENCE_LENGTH = 16
 PITCH_RANGE = 128
 
@@ -61,7 +83,9 @@ def preprocess_and_save_dataset(limit=None):
             total_steps = int(end_time * SAMPLING_FREQUENCY)
 
             # 2. Create an empty piano roll (all zeros)
-            piano_roll = np.zeros((PITCH_RANGE, total_steps), dtype=np.float32)
+            # piano_roll = np.zeros((PITCH_RANGE, total_steps), dtype=np.float32)
+            piano_roll = np.zeros((PITCH_RANGE, total_steps), dtype=np.uint8)
+            # piano_roll = np.zeros((PITCH_RANGE, total_steps))
 
             # 3. Iterate through each note and "draw" it onto the piano roll
             for instrument in midi_data.instruments:
@@ -80,16 +104,21 @@ def preprocess_and_save_dataset(limit=None):
             for i in range(num_sequences):
                 start_idx = i * SEQUENCE_LENGTH
                 end_idx = start_idx + SEQUENCE_LENGTH
-                sequence = piano_roll[start_idx:end_idx].T
+                sequence = piano_roll[start_idx:end_idx].T.copy()
 
                 if sequence.shape == (PITCH_RANGE, SEQUENCE_LENGTH):
                     tensor = torch.from_numpy(sequence)
+
+                    # Force the tensor to be uint8 before saving
+                    # tensor_to_save = tensor.to(torch.uint8)
+
                     base_midi_name = os.path.splitext(os.path.basename(midi_filename))[
                         0
                     ]
                     output_filename = f"{base_midi_name}_segment_{i}.pt"
                     output_path = os.path.join(PROCESSED_DIR, output_filename)
                     torch.save(tensor, output_path)
+
         except Exception as e:
             print(f"\nCould not process file {midi_path}. Error: {e}")
 
@@ -183,6 +212,7 @@ def visualize_reconstruction(
 # ==============================================================================
 # 4. & 5. (Unchanged)
 # ==============================================================================
+# TODO: add the possibility to select a specific segment
 def run_random_visualization(limit=None):
     # This function is the same as the last version
     print("\n--- Running Random Visualization ---")
@@ -230,6 +260,13 @@ def run_random_visualization(limit=None):
 
 
 if __name__ == "__main__":
-    TEST_LIMIT = 1
+    if TEST_LIMIT == None:
+        print(f"Prosessing : ALL files at {SAMPLING_FREQUENCY} per second ")
+    else:
+        print(f"Proscessing : {TEST_LIMIT} files at {SAMPLING_FREQUENCY} per second ")
     preprocess_and_save_dataset(limit=TEST_LIMIT)
     run_random_visualization(limit=TEST_LIMIT)
+    # # When loading data for your model:
+    # segment_tensor_uint8 = torch.load("path/to/segment.pt")
+    # # Convert to float for the model
+    # segment_tensor_float32 = segment_tensor_uint8.to(torch.float32)
