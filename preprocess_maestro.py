@@ -116,9 +116,6 @@ class MaestroProcessor:
             segments_tensor = self._midi_to_segments(midi_path)
 
             if segments_tensor is not None:
-                print(
-                    f"\nVerifying tensor for {midi_path.stem}: Dtype={segments_tensor.dtype}, Shape={segments_tensor.shape}"
-                )
                 output_filename = f"{midi_path.stem}.pt"
                 output_path = self.processed_dir / output_filename
                 torch.save(segments_tensor, output_path)

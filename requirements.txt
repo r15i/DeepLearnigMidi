@@ -6,7 +6,6 @@ pretty_midi
 mido
 # Plotting and visualization
 matplotlib
-
 # NOTE: torch and torchvision are installed separately below
 # to ensure correct CUDA version matching.
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -15,4 +14,5 @@ torchvision
 torchaudio 
 tqdm
 # for server 
+# torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

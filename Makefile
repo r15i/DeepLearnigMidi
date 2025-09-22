@@ -28,6 +28,10 @@ RSYNC_FLAGS := -avzh --delete --progress
 LIMIT ?= 10 
 SF ?= 50
 
+# --- Training Configuration ---
+EPOCHS ?= 100 
+BATCH ?= 128
+
 .PHONY: help setup sync preprocess attach kill-session
 
 help:
@@ -56,21 +60,15 @@ sync:
 clean_local:
 	rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
 	rm -f preprocess.log
+	# rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
+	# rm -f preprocess.log
+
 preprocess_local: clean_local
 	time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
 	feh reconstruction_verification.png
 	du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
-preprocess_test: sync
-	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
-	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
-		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
-		rm -rf $(REMOTE_PROCESSED_DIR) && mkdir -p $(REMOTE_PROCESSED_DIR);\
-		rm preprocess.log;\
-		time .venv/bin/python preprocess_maestro.py  --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log '"
-	@echo ">>> Job started successfully on remote server."
-	@echo ">>> To view progress, run: make attach"
 
-preprocess: sync
+preprocess: 
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
 		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
@@ -80,6 +78,30 @@ preprocess: sync
 	
 	@echo ">>> Job started successfully on remote server."
 	@echo ">>> To view progress, run: make attach"
+
+train : 
+	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
+	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
+		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
+		rm -rf training.log;\
+		time .venv/bin/python main.py --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
+	@echo ">>> Job started successfully on remote server."
+	@echo ">>> To view progress, run: make attach"
+
+pull-results:	
+	@echo ">>> Syncing results from remote server using rsync..."
+	# Create the local directory if it doesn't exist
+	mkdir -p training_output
+	# Use rsync to efficiently sync the training output directory
+	rsync -avz --progress \
+	    $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_BASE_PATH)/$(PROJECT_NAME)/training_output/ \
+	    ./training_output/
+	# Sync the log file as well
+	rsync -avz --progress \
+	    $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_BASE_PATH)/$(PROJECT_NAME)/training.log \
+	    .
+	@echo ">>> Results successfully synced to the 'training_output' directory."
+
 attach:
 	@echo ">>> Attaching to tmux session '$(TMUX_SESSION_NAME)' on $(REMOTE_HOST)..."
 	ssh -t $(REMOTE_USER)@$(REMOTE_HOST) "tmux attach -t $(TMUX_SESSION_NAME)"
@@ -88,3 +110,8 @@ kill-session:
 	@echo ">>> Killing tmux session '$(TMUX_SESSION_NAME)' on $(REMOTE_HOST)..."
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux kill-session -t $(TMUX_SESSION_NAME)" || true
 	@echo ">>> Session killed."
+
+
+play:
+	@echo "Generating and playing bars "
+	.venv/bin/python generate.py --num-bars 16 --play
