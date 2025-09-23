@@ -2,15 +2,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-
+*.fish
 dataset/*
-
-
-
 # C extensions
 *.so
-
 # Distribution / packaging
 .Python
 build/
