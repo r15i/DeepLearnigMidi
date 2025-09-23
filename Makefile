@@ -80,8 +80,8 @@ clean-remote-training:
 
 preprocess_local: clean_local
 	time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
-	feh reconstruction_verification.png
-	du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
+	feh  dataset/MAESTRO_Dataset/reconstruction_verification.png
+	# du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
 
 preprocess: clean_local sync
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
