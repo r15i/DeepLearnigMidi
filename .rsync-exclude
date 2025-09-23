@@ -1,5 +1,5 @@
 # Version control
-# .git/
+.git/
 # Python specific
 __pycache__/
 *.pyc

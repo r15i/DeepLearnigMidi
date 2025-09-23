@@ -29,8 +29,8 @@ LIMIT ?= 10
 SF ?= 50
 
 # --- Training Configuration ---
-EPOCHS ?= 100 
-BATCH ?= 128
+EPOCHS ?= 1000 
+BATCH ?= 256
 
 .PHONY: help setup sync preprocess attach kill-session
 
@@ -60,15 +60,30 @@ sync:
 clean_local:
 	rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
 	rm -f preprocess.log
-	# rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
-	# rm -f preprocess.log
+	rm -f training.log
+	rm -rf training_output
+	rm -rf generated_music.mid
+	rm -rf reconstruction_verification.png
+clean-remote-preprocess:
+	@echo ">>> Cleaning REMOTE preprocessing directory and logs..."
+	ssh $(REMOTE_USER)@$(REMOTE_HOST) ' \
+		rm -rf $(REMOTE_BASE_PATH)/$(PROJECT_NAME)/dataset/MAESTRO_Dataset/processed && \
+		mkdir -p $(REMOTE_BASE_PATH)/$(PROJECT_NAME)/dataset/MAESTRO_Dataset/processed && \
+    		rm -f $(REMOTE_BASE_PATH)/$(PROJECT_NAME)/preprocess.log'
+	@echo ">>> Remote preprocessing artifacts cleaned successfully."
+clean-remote-training:
+	@echo ">>> Cleaning REMOTE training directory and logs..."
+	ssh $(REMOTE_USER)@$(REMOTE_HOST) ' \
+		rm -rf $(REMOTE_BASE_PATH)/$(PROJECT_NAME)/training_output && \
+		rm -f $(REMOTE_BASE_PATH)/$(PROJECT_NAME)/training.log'
+	@echo ">>> Remote training artifacts cleaned successfully."
 
 preprocess_local: clean_local
 	time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
 	feh reconstruction_verification.png
 	du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
 
-preprocess: 
+preprocess: clean_local sync
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
 		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
@@ -78,6 +93,7 @@ preprocess:
 	
 	@echo ">>> Job started successfully on remote server."
 	@echo ">>> To view progress, run: make attach"
+	make attach
 
 train : 
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
@@ -87,6 +103,9 @@ train :
 		time .venv/bin/python main.py --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
 	@echo ">>> Job started successfully on remote server."
 	@echo ">>> To view progress, run: make attach"
+	make attach
+
+full-run : 	preprocess train pull-results
 
 pull-results:	
 	@echo ">>> Syncing results from remote server using rsync..."
@@ -114,4 +133,5 @@ kill-session:
 
 play:
 	@echo "Generating and playing bars "
-	.venv/bin/python generate.py --num-bars 16 --play
+	.venv/bin/python generate.py --num-bars 18
+	timidity generated_music.mid
