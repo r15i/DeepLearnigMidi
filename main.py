@@ -1,17 +1,14 @@
+# main.py
+
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import pandas as pd
-import numpy as np
+from torch.utils.data import DataLoader
 import os
 import torchvision.utils as vutils
+from tqdm import tqdm
+import argparse
 
-# # dataset MNIST (esempio), training loop minimale
-# from torchvision import datasets, transforms
-
-
-# --- Assumed Local Imports (User's files) ---
+# Local imports
 import DBAdapters as dba
 import models as md
 
@@ -20,152 +17,176 @@ import models as md
 # ==============================================================================
 
 # --- Paths and Directories ---
-csv_file_path = "./dataset/MAESTRO_Dataset/maestro-v3.0.0.csv"
-midi_base_path = "./dataset/MAESTRO_Dataset/maestro-v3.0.0"
-output_dir = "training_output"
-os.makedirs(output_dir, exist_ok=True)
-os.makedirs(os.path.join(output_dir, "models"), exist_ok=True)
+# NOTE: We now point directly to the directory with the preprocessed .pt files.
+PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"
+OUTPUT_DIR = "training_output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(os.path.join(OUTPUT_DIR, "models"), exist_ok=True)
+
+
+# --- Argument Parser Setup ---
+parser = argparse.ArgumentParser(
+    description="Preprocess, train a VAE, and visualize the MAESTRO dataset.",
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter,  # Shows default values in help message
+)
+
+# --- VAE Training Hyperparameters ---
+parser.add_argument(
+    "-e", "--epochs", type=int, default=10, help="Number of training epochs."
+)
+parser.add_argument(
+    "-b", "--batch-size", type=int, default=32, help="Batch size for training."
+)
+parser.add_argument(
+    "-lr",
+    "--learning-rate",
+    type=float,
+    default=1e-3,
+    help="Learning rate for the Adam optimizer.",
+)
+parser.add_argument(
+    "-ld",
+    "--latent-dim",
+    type=int,
+    default=32,
+    help="Dimension of the VAE's latent space.",
+)
+parser.add_argument(
+    "--beta",
+    type=float,
+    default=1.0,
+    help="Weight of the KL divergence term in the VAE loss.",
+)
+parser.add_argument(
+    "--seq-len",
+    type=int,
+    default=16,
+    help="Number of time steps (width) per MIDI segment.",
+)
+
+# Parse the arguments
+args = parser.parse_args()
+
 
 # --- Hyperparameters ---
-h = 128  # MIDI notes (height)
-w = 16  # Time steps (width)
-batch_size = 32 #depends on the GPU
-num_epochs = 10
-# noise_dim = 100  TBD for noise
-
-
+# H is a constant based on the MIDI standard, not an argument.
+H = 128
+# All other hyperparameters are now loaded from the command-line arguments.
+W = args.seq_len
+BATCH_SIZE = args.batch_size
+NUM_EPOCHS = args.epochs
+LEARNING_RATE = args.learning_rate
+LATENT_DIM = args.latent_dim
+BETA = args.beta
 
 # --- Dataset and DataLoader ---
-# num_workers can be changed (depends on what you run the code)
-my_dataset = dba.MaestroMIDIDataset(
-    csv_file=csv_file_path, midi_base_path=midi_base_path
-)
+print("Loading dataset from preprocessed .pt files...")
+
+# Use the new, faster dataset class that loads from .pt files
+# Ensure your DBAdapters.py has the MaestroPreprocessedDataset class
+my_dataset = dba.MaestroPreprocessedDataset(processed_dir=PROCESSED_DIR)
+
 data_loader = DataLoader(
-    my_dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True, collate_fn=dba.collate_fn_skip_error,
+    my_dataset,
+    batch_size=BATCH_SIZE,
+    shuffle=True,
+    num_workers=4,  # Adjust based on your system's capabilities
+    pin_memory=True,
+    # collate_fn is not strictly needed now but doesn't hurt
+    # collate_fn=dba.collate_fn_skip_error,
 )
-
+print(f"Dataset loaded successfully with {len(my_dataset)} samples.")
 
 # ==============================================================================
-# 2. Model, Optimizers, and Loss Functions
+# 2. Model, Optimizer, and Loss
 # ==============================================================================
 
-# --- IMPORTANT NOTE ON MODEL ARCHITECTURE ---
-# The training logic below requires to modify the latent dimension depending on how much general should be
-# should be the output. If the dataset contains different important features (different patterns/ poliphonic music)
-# an higher dimension of teh latent variable is needed [>=32]
-
-# --- Instantiate the model ---
-model = md.ConvVAE(latent_dim=32)
-
-
-# --- Loss functions and Optimizers ---
-# Directly uses the optimized, built-in PyTorch loss functions:
-#         nn.BCEWithLogitsLoss(): in our case is enough
-#         nn.MSELoss(): better if we want to add the velocity condition
-# EMILIO check the two line below
-# Second Script (Custom Wrappers): Wraps the standard PyTorch functions
-# inside its own custom functions (binary_cross_entropy_with_logits, l2_loss, lrelu).
-# criterion_adv = nn.BCEWithLogitsLoss()  # For adversarial loss (more stable)
-# criterion_l2 = nn.MSELoss()  # For L2 feature matching losses
-
-optimiser = optim.Adam(model.parameters(), lr=1e-3)
-# optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(0.5, 0.999))
-# optimizerG = optim.Adam(
-#     list(netG.parameters()) + list(netC.parameters()), lr=lr, betas=(0.5, 0.999)
-# )
-
-# --- Move to GPU if available ---
+# --- Device ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
-model.to(device)
-# netG.to(device)
-# netD.to(device)
-# netC.to(device)
+
+# --- Instantiate the model ---
+model = md.ConvVAE(latent_dim=LATENT_DIM).to(device)
+
+# --- Optimizer ---
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 # ==============================================================================
 # 3. Training Loop
 # ==============================================================================
 
-print("\nStarting MidiNet Training Loop...")
-#fixed_noise = torch.randn(batch_size, noise_dim, device=device) I don't remember EMILIO HELP
-for epoch in range(num_epochs):
+print("\n🚀 Starting VAE Training Loop...")
+for epoch in range(NUM_EPOCHS):
     model.train()
     total_loss, total_recon, total_kl = 0, 0, 0
-    for i, batch in enumerate(data_loader):
+
+    # Using tqdm for a nice progress bar
+    progress_bar = tqdm(data_loader, desc=f"Epoch {epoch + 1}/{NUM_EPOCHS}")
+
+    for batch in progress_bar:
         if batch is None:
-            print(f"Skipping a bad batch at index {i}.")
             continue
 
-        x = batch["real_melody_bar"].to(device)   # (B,1,128,16)
+        x = batch["real_melody_bar"].to(device)  # Shape: (B, 1, H, W)
 
-        # Forward
+        # --- Forward pass ---
         x_logits, mu, logvar = model(x)
-        loss, recon, kl = md.vae_loss(x, x_logits, mu, logvar)
+        loss, recon, kl = md.vae_loss(x, x_logits, mu, logvar, beta=BETA)
 
-        optimiser.zero_grad()
+        # --- Backward pass and optimization ---
+        optimizer.zero_grad()
         loss.backward()
-        optimiser.step()
+        optimizer.step()
 
+        # --- Accumulate losses for logging ---
         total_loss += loss.item()
         total_recon += recon.item()
         total_kl += kl.item()
-        # --- Log to console ---
-        if i % 100 == 0:
-            print(
-                f"[{epoch + 1}/{num_epochs}][{i}/{len(data_loader)}] | "
-                # f"Loss_D: {errD.item():.4f} | Loss_G: {errG.item():.4f} | "
-                # f"D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} -> {D_G_z2:.4f}"
-            )
+
+        # Update progress bar description
+        progress_bar.set_postfix(
+            {
+                "Loss": f"{loss.item():.4f}",
+                "Recon": f"{recon.item():.2f}",
+                "KL": f"{kl.item():.2f}",
+            }
+        )
 
     # --- End of Epoch ---
-    print(f"\n===> Epoch {epoch + 1} Complete\n",
-          f"\n recon={total_recon/len(data_loader):.2f}\n ",
-          f"\n kl={total_kl/len(data_loader):.2f}\n")
-    
+    avg_loss = total_loss / len(data_loader)
+    avg_recon = total_recon / len(data_loader)
+    avg_kl = total_kl / len(data_loader)
+    print(f"\n===> Epoch {epoch + 1} Complete:")
+    print(
+        f"    Average Loss: {avg_loss:.4f} | Avg Recon Loss: {avg_recon:.2f} | Avg KL Div: {avg_kl:.2f}\n"
+    )
+
+print("✅ Training finished.")
+
 # ==============================================================================
-# 4. Evaluation
+# 4. Save Model and Generate Samples
 # ==============================================================================
+print("💾 Saving final model...")
+model_save_path = os.path.join(OUTPUT_DIR, "models", "vae_final.pth")
+torch.save(model.state_dict(), model_save_path)
+print(f"Model saved to {model_save_path}")
+
+print("\n🎶 Generating new MIDI samples from random noise...")
 model.eval()
 with torch.no_grad():
-    z = torch.randn(8, model.latent_dim).to(device)
+    # Create random latent vectors
+    z = torch.randn(64, model.latent_dim).to(device)
+
+    # Decode them into piano roll logits
     logits = model.decode(z)
-    samples = torch.sigmoid(logits)  # (8,1,128,16)
 
-    print("Generated samples shape:", samples.shape)
-    # Visualizza il primo sample
-    dba.visualize_midi(samples[0].cpu())
+    # Apply sigmoid to get probabilities and create binary samples by thresholding
+    samples = (torch.sigmoid(logits) > 0.5).float()  # (64, 1, 128, 16)
 
-exit()
+    # Save a grid of the generated samples
+    sample_grid_path = os.path.join(OUTPUT_DIR, "generated_samples.png")
+    vutils.save_image(samples, sample_grid_path, normalize=True)
+    print(f"Generated samples saved to {sample_grid_path}")
 
-# ==============================================================================
-# 3. Training Loop with chord
-# ==============================================================================
-
-print("\nStarting MidiNet Training Loop with conditioned bars...")
-#fixed_noise = torch.randn(batch_size, noise_dim, device=device) I don't remember EMILIO HELP
-num_epochs = 10
-for epoch in range(num_epochs):
-    # Initialize the condition for the first bar of each sequence in the batch
-    previous_bar_melody_condition = torch.zeros((batch_size, 1, h, w), device=device)
-
-    for i, batch in enumerate(data_loader):
-        if batch is None:
-            print(f"Skipping a bad batch at index {i}.")
-            continue
-
-        real_melody_bar = batch["real_melody_bar"].to(device)
-        chord_condition = batch["chord_condition"].to(device)
-
-        # --- Log to console ---
-        if i % 100 == 0:
-            print(
-                f"[{epoch + 1}/{num_epochs}][{i}/{len(data_loader)}] | "
-                # f"Loss_D: {errD.item():.4f} | Loss_G: {errG.item():.4f} | "
-                # f"D(x): {D_x:.4f} | D(G(z)): {D_G_z1:.4f} -> {D_G_z2:.4f}"
-            )
-
-    # --- End of Epoch ---
-    print(f"\n===> Epoch {epoch + 1} Complete\n")
-
-
-print("Training finished.")
+    # Visualize the first generated sample
+    dba.visualize_midi(samples[0], title="First Generated Sample")

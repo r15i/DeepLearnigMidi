@@ -1,0 +1,110 @@
+# DBAdapters.py
+
+# NOTE: Eager version wich preprocess and than run stuff
+
+
+import torch
+from torch.utils.data import Dataset
+import pandas as pd
+import numpy as np
+import os
+import pretty_midi
+import matplotlib.pyplot as plt
+
+
+class MaestroMIDIDataset(Dataset):
+    def __init__(
+        self,
+        csv_file="./dataset/MAESTRO_Dataset/maestro-v3.0.0.csv",
+        midi_base_path="./dataset/MAESTRO_Dataset/maestro-v3.0.0",
+        transform=None,
+        h=128,  # MIDI notes (0-127)
+        w=16,  # Time steps per bar (16th notes)
+    ):
+        self.midi_base_path = midi_base_path
+        self.transform = transform
+        self.h = h
+        self.w = w
+
+        data_frame = pd.read_csv(csv_file)
+        self.data_frame = data_frame.dropna(subset=["midi_filename"])
+
+        print(
+            "Initializing dataset... This may take a moment as we pre-process all MIDI files (eager loading)."
+        )
+        self.all_samples = self._create_samples()
+        print(f"Initialization complete. Found {len(self.all_samples)} valid bars.")
+
+    def _create_samples(self):
+        all_samples = []
+        for idx in range(len(self.data_frame)):
+            midi_relative_path = self.data_frame.iloc[idx]["midi_filename"]
+            midi_full_path = os.path.join(self.midi_base_path, midi_relative_path)
+
+            if not os.path.exists(midi_full_path):
+                continue
+
+            try:
+                midi_data = pretty_midi.PrettyMIDI(midi_full_path)
+                bar_times = midi_data.get_downbeats()
+                if len(bar_times) < 2:
+                    continue
+
+                piano_roll = midi_data.get_piano_roll(fs=100)
+                piano_roll_binary = (piano_roll > 0).astype(np.float32)
+
+                for i in range(len(bar_times) - 1):
+                    start_time, end_time = bar_times[i], bar_times[i + 1]
+                    start_idx, end_idx = int(start_time * 100), int(end_time * 100)
+
+                    bar_slice = piano_roll_binary[:, start_idx:end_idx]
+                    if bar_slice.shape[1] == 0:
+                        continue
+
+                    time_indices = np.linspace(
+                        0, bar_slice.shape[1] - 1, self.w, dtype=int
+                    )
+                    current_bar_matrix = bar_slice[:, time_indices]
+
+                    # For a simple VAE, we only need the current bar
+                    all_samples.append(current_bar_matrix)
+
+            except Exception:
+                continue
+        return all_samples
+
+    def __len__(self):
+        return len(self.all_samples)
+
+    def __getitem__(self, idx):
+        current_bar = self.all_samples[idx]
+
+        # Shape: [128, 16] -> [1, 128, 16] for Conv2d
+        sample = {"real_melody_bar": torch.from_numpy(current_bar).unsqueeze(0)}
+
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
+
+def collate_fn_skip_error(batch):
+    batch = list(filter(lambda x: x is not None, batch))
+    return torch.utils.data.dataloader.default_collate(batch) if batch else None
+
+
+def visualize_midi(piano_roll_tensor, title="Piano Roll Visualization"):
+    if piano_roll_tensor.is_cuda:
+        piano_roll_tensor = piano_roll_tensor.cpu()
+    plt.figure(figsize=(10, 5))
+    piano_roll = piano_roll_tensor.squeeze().detach().numpy()
+    plt.imshow(
+        piano_roll,
+        aspect="auto",
+        origin="lower",
+        cmap="binary",
+        interpolation="nearest",
+    )
+    plt.title(title)
+    plt.xlabel("Time Step")
+    plt.ylabel("MIDI Pitch")
+    plt.show()

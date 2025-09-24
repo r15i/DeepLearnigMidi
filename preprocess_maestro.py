@@ -116,9 +116,6 @@ class MaestroProcessor:
             segments_tensor = self._midi_to_segments(midi_path)
 
             if segments_tensor is not None:
-                print(
-                    f"\nVerifying tensor for {midi_path.stem}: Dtype={segments_tensor.dtype}, Shape={segments_tensor.shape}"
-                )
                 output_filename = f"{midi_path.stem}.pt"
                 output_path = self.processed_dir / output_filename
                 torch.save(segments_tensor, output_path)
@@ -133,11 +130,13 @@ class MaestroVisualizer:
 
     def __init__(
         self,
+        data_path: str,
         csv_path: str,
         midi_root: str,
         processed_dir: str,
         sampling_frequency: int = 20,
     ):
+        self.data_path = Path(data_path)
         self.csv_path = Path(csv_path)
         self.midi_root = Path(midi_root)
         self.processed_dir = Path(processed_dir)
@@ -261,7 +260,13 @@ class MaestroVisualizer:
                 print("Found a non-silent segment!")
                 print(f"Selected song: '{midi_path.name}'")
                 print(f"Selected segment: #{segment_id}")
-                self.visualize_reconstruction(midi_path, segment_tensor, segment_id)
+                self.visualize_reconstruction(
+                    midi_path,
+                    segment_tensor,
+                    segment_id,
+                    output_image_path=self.data_path
+                    / "reconstruction_verification.png",
+                )
                 return
 
         print(f"\nCould not find a non-silent segment after {max_tries} tries.")
@@ -303,6 +308,7 @@ if __name__ == "__main__":
 
     if args.visualize:
         visualizer = MaestroVisualizer(
+            data_path=str(DATASET_DIR),
             csv_path=str(CSV_FILE),
             midi_root=str(MIDI_ROOT),
             processed_dir=str(PROCESSED_DIR),

@@ -1,79 +1,71 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
 import torch.nn.functional as F
-import pandas as pd
-import numpy as np
-import os
-import torchvision.utils as vutils
-
-# --- Assumed Local Imports (User's files) ---
-import DBAdapters as dba
-
-
-# # PyTorch VAE (Conv) - encoder -> mu, logvar; reparameterization; decoder -> logits
-# import torch
-# import torch.nn as nn
-# import torch.nn.functional as F
 
 
 class ConvVAE(nn.Module):
-    def __init__(self, latent_dim=20):
+    def __init__(self, latent_dim=32):
         super().__init__()
         self.latent_dim = latent_dim
-        # Encoder convs (input B,1,28,28)
-        self.enc_conv = nn.Sequential(
-            # 1 immagine a 32 (32 filtri qu)
-            nn.Conv2d(1, 32, 4, 2, 1),  # -> (32, 64, 8)
+
+        # Encoder: (B, 1, 128, 16) -> (B, latent_dim)
+        self.encoder_conv = nn.Sequential(
+            # Input: (B, 1, 128, 16)
+            nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1),  # -> (B, 32, 64, 8)
             nn.ReLU(True),
-            nn.Conv2d(32, 64, 4, 2, 1),  # -> (64, 32, 4)
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # -> (B, 64, 32, 4)
             nn.ReLU(True),
-            nn.Conv2d(64, 128, 4, 2, 1),  # -> (128, 16, 2)
+            nn.Conv2d(
+                64, 128, kernel_size=4, stride=2, padding=1
+            ),  # -> (B, 128, 16, 2)
             nn.ReLU(True),
         )
-        # dimension final feature map = (128, 16, 2)
-        self._enc_out_channels = 128
-        self._enc_feat_h = 16
-        self._enc_feat_w = 2
-        enc_out_dim = self._enc_out_channels * self._enc_feat_h * self._enc_feat_w
-        
-        # layer fully connected -> mu e logvar
+
+        # Calculate the flattened size of the encoder's output feature map
+        self._enc_out_shape = (128, 16, 2)
+        enc_out_dim = (
+            self._enc_out_shape[0] * self._enc_out_shape[1] * self._enc_out_shape[2]
+        )
+
+        # Fully connected layers to get mu and logvar
         self.fc_mu = nn.Linear(enc_out_dim, latent_dim)
         self.fc_logvar = nn.Linear(enc_out_dim, latent_dim)
 
-        # Decoder
-        self.fc_dec = nn.Linear( latent_dim, enc_out_dim)
-        self.dec_conv = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 4, 2, 1), # -> (64, 32, 4)
+        # Decoder: (B, latent_dim) -> (B, 1, 128, 16)
+        self.decoder_fc = nn.Linear(latent_dim, enc_out_dim)
+        self.decoder_conv = nn.Sequential(
+            # Input: (B, 128, 16, 2)
+            nn.ConvTranspose2d(
+                128, 64, kernel_size=4, stride=2, padding=1
+            ),  # -> (B, 64, 32, 4)
             nn.ReLU(True),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1), # -> (32, 64, 8)
+            nn.ConvTranspose2d(
+                64, 32, kernel_size=4, stride=2, padding=1
+            ),  # -> (B, 32, 64, 8)
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, 1, 4, 2, 1), # -> (1, 128, 16)
-            
+            nn.ConvTranspose2d(
+                32, 1, kernel_size=4, stride=2, padding=1
+            ),  # -> (B, 1, 128, 16)
         )
 
     def encode(self, x):
-        h = self.enc_conv(x)
-        B = h.shape[0]
-        h_flat = h.view(B, -1)
+        h = self.encoder_conv(x)
+        h_flat = h.view(h.size(0), -1)  # Flatten the feature map
         mu = self.fc_mu(h_flat)
         logvar = self.fc_logvar(h_flat)
         return mu, logvar
 
     def reparameterize(self, mu, logvar):
-        std = (0.5 * logvar).exp()
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode(self, z):
-        h = self.fc_dec(z)
-        B = h.shape[0]
-        h = h.view(B, self._enc_out_channels, self._enc_feat_h, self._enc_feat_w)
-        x_logits = self.dec_conv(h)
-        # x_logits = F.interpolate(
-        #     x_logits, size=(28, 28), mode="bilinear", align_corners=False
-        # )  Non serve interpolare: il modello è scritto in modo che l'output abbia la stessa dimensione dell'input
+        # Project and reshape
+        h = self.decoder_fc(z)
+        h = h.view(h.size(0), *self._enc_out_shape)
+        # Apply transposed convolutions
+        x_logits = self.decoder_conv(h)
         return x_logits
 
     def forward(self, x):
@@ -83,10 +75,22 @@ class ConvVAE(nn.Module):
         return x_logits, mu, logvar
 
 
-def vae_loss(x, x_logits, mu, logvar):
-    # BCE: because piano rolls are binary
+def vae_loss(x, x_logits, mu, logvar, beta=1.0):
+    """
+    Calculates the VAE loss, which is a sum of reconstruction loss and KL divergence.
+    Loss is averaged over the batch.
+    """
+    batch_size = x.size(0)
+
+    # Reconstruction Loss (Binary Cross-Entropy)
+    # Measures how well the VAE reconstructs the input piano roll.
     recon_loss = F.binary_cross_entropy_with_logits(x_logits, x, reduction="sum")
-    var = logvar.exp()
-    # slide 67 autoencoder
-    kl = 0.5 * torch.sum(mu.pow(2) + var - logvar - 1.0)
-    return recon_loss + kl, recon_loss, kl
+
+    # KL Divergence
+    # A regularizer that forces the latent space to be a smooth, continuous distribution (a Gaussian).
+    kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    # Combine losses and average over the batch
+    total_loss = (recon_loss + beta * kl_div) / batch_size
+
+    return total_loss, recon_loss / batch_size, kl_div / batch_size
