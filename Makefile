@@ -29,7 +29,7 @@ LIMIT ?= 1
 SF ?= 50
 
 # --- Training Configuration ---
-EPOCHS ?= 1000 
+EPOCHS ?= 50 
 BATCH ?= 256
 
 .PHONY: help setup sync preprocess attach kill-session
@@ -82,8 +82,8 @@ preprocess_local: clean_local
 	# old only maestro:
 	# time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
 	#
-	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0/2004/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) --visualize-random
-	time .venv/bin/python preprocess.py --midi-dir ./dataset/RaNdO/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) 
+	time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0/2004/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) --visualize-random
+	# time .venv/bin/python preprocess.py --midi-dir ./dataset/RaNdO/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) 
 	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0/2004/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) --skip-process --visualize-song "MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.midi" --segment-id 42
 	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0 --processed-dir ./processed_data
 	# python your_script_name.py --midi-dir ./my_midi_files --processed-dir ./processed_data --skip-process --visualize-random
@@ -113,7 +113,7 @@ train :
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
 		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
 		rm -rf training.log;\
-		time .venv/bin/python main.py --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
+		time .venv/bin/python main.py -m res --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
 	@echo ">>> Job started successfully on remote server."
 	@echo ">>> To view progress, run: make attach"
 	make attach
