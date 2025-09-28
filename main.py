@@ -162,7 +162,7 @@ def main():
     # ==============================================================================
     # 3. Training  & Validation Loop
     # ==============================================================================
-    # Vettori per salvare le metriche
+    # Loss Vectors
     train_losses, train_recons, train_kls = [], [], []
     val_losses, val_recons, val_kls = [], [], []
 
@@ -247,6 +247,20 @@ def main():
 
         print(f"    Average Val Loss:   {avg_val_loss:.4f} | Avg Recon: {avg_val_recon:.2f} | Avg KL Div: {avg_val_kl:.2f}\n")
 
+        # --- Early Stopping ---
+        if avg_val_loss < best_val_loss - delta:
+            best_val_loss = avg_val_loss
+            counter = 0
+            model_save_path = os.path.join(OUTPUT_DIR, "models", f"{args.model}_vae_final.pth")
+            torch.save(model.state_dict(), model_save_path)
+            print(" New best model saved!")
+        else:
+            counter += 1
+            print(f" EarlyStopping counter: {counter}/{patience}")
+            if counter >= patience:
+                print(" Early stopping triggered!")
+                break
+
     print("✅ Training  and Validation finished.")
 
     # ==============================================================================
@@ -286,12 +300,9 @@ def main():
     plt.savefig(plot_save_path, dpi=300, bbox_inches="tight")
 
     # ==============================================================================
-    # 5. Save Model and Generate Samples
+    # 5. Generate Samples
     # ==============================================================================
-    print(" Saving final model...")
-    model_save_path = os.path.join(OUTPUT_DIR, "models", f"{args.model}_vae_final.pth")
-    torch.save(model.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
+
 
     print("\n Generating new MIDI samples from random noise...")
     model.eval()
