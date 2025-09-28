@@ -13,7 +13,7 @@ class MaestroPreprocessedDataset(Dataset):
     Each .pt file is expected to contain a tensor of piano roll segments.
     """
 
-    def __init__(self, processed_dir="./dataset/MAESTRO_Dataset/processed"):
+    def __init__(self, processed_dir="./dataset/processed"):
         self.processed_dir = Path(processed_dir)
 
         print(f"Looking for preprocessed files in: {self.processed_dir}")
