@@ -25,7 +25,7 @@ TMUX_SESSION_NAME := preprocessing
 RSYNC_FLAGS := -avzh --delete --progress
 
 # --- Preprocessing Configuration ---
-LIMIT ?= 10 
+LIMIT ?= 1
 SF ?= 50
 
 # --- Training Configuration ---
@@ -59,11 +59,11 @@ sync:
 	@echo ">>> Synchronization complete."
 clean_local:
 	rm -rf ./dataset/MAESTRO_Dataset/processed &&  mkdir -p ./dataset/MAESTRO_Dataset/processed
+	rm -rf ./dataset/preprocess
 	rm -f preprocess.log
 	rm -f training.log
 	rm -rf training_output
 	rm -rf generated_music.mid
-	rm -rf reconstruction_verification.png
 clean-remote-preprocess:
 	@echo ">>> Cleaning REMOTE preprocessing directory and logs..."
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) ' \
@@ -79,8 +79,21 @@ clean-remote-training:
 	@echo ">>> Remote training artifacts cleaned successfully."
 
 preprocess_local: clean_local
-	time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
-	feh  dataset/MAESTRO_Dataset/reconstruction_verification.png
+	# old only maestro:
+	# time .venv/bin/python preprocess_maestro.py  --visualize --limit=$(LIMIT) --sf=$(SF) | tee preprocess.log 
+	#
+	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0/2004/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) --visualize-random
+	time .venv/bin/python preprocess.py --midi-dir ./dataset/RaNdO/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) 
+	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0/2004/ --processed-dir ./dataset/processed/ --limit=$(LIMIT) --sf=$(SF) --skip-process --visualize-song "MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.midi" --segment-id 42
+	# time .venv/bin/python preprocess.py --midi-dir ./dataset/MAESTRO_Dataset/maestro-v3.0.0 --processed-dir ./processed_data
+	# python your_script_name.py --midi-dir ./my_midi_files --processed-dir ./processed_data --skip-process --visualize-random
+	# python your_script_name.py --midi-dir ./my_midi_files --processed-dir ./processed_data --skip-process 
+	# --visualize-song "clair_de_lune.mid" --segment-id 42
+
+visual_random: clean_local
+	time .venv/bin/python preprocess.py --midi-dir ./dataset/RaNdO/ --processed-dir ./dataset/processed/  --visualize-random --skip-process
+	feh  ./random_reconstruction.png
+
 	# du -sh  ./dataset/MAESTRO_Dataset/processed/MIDI-Unprocessed_Chamber3_MID--AUDIO_10_R3_2018_wav--1_segment_0.pt
 
 preprocess: clean_local sync

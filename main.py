@@ -18,7 +18,7 @@ import models as md
 
 # --- Paths and Directories ---
 # NOTE: We now point directly to the directory with the preprocessed .pt files.
-PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"
+PROCESSED_DIR = "./dataset/processed"
 OUTPUT_DIR = "training_output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, "models"), exist_ok=True)
