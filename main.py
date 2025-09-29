@@ -12,7 +12,7 @@ import argparse
 # Local imports
 import DBAdapters as dba
 import models as md
-from evaluator import MusicEvaluator  
+from evaluator import MusicEvaluator
 
 
 def main():
