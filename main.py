@@ -12,7 +12,7 @@ import argparse
 # Local imports
 import DBAdapters as dba
 import models as md
-from evaluator import MusicEvaluator  
+from evaluator import MusicEvaluator
 
 
 def main():
@@ -317,38 +317,36 @@ def main():
     # 5. Generate Samples
     # ==============================================================================
 
-    print("\n Generating new MIDI samples from random noise...")
-    model.eval()
-    with torch.no_grad():
-        # Create random latent vectors
-        z = torch.randn(64, model.latent_dim).to(device)
-
-        # Decode them into piano roll logits
-        logits = model.decode(z)
-
-        # Apply sigmoid to get probabilities and create binary samples by thresholding
-        samples = (torch.sigmoid(logits) > 0.5).float()  # (64, 1, 128, 16)
-
-        # Save a grid of the generated samples
-        sample_grid_path = os.path.join(OUTPUT_DIR, "generated_samples.png")
-        vutils.save_image(samples, sample_grid_path, normalize=True)
-        print(f"Generated samples saved to {sample_grid_path}")
-
-        # Visualize the first generated sample
-        dba.visualize_midi(samples[0], title="First Generated Sample")
-
+    # print("\n Generating new MIDI samples from random noise...")
+    # model.eval()
+    # with torch.no_grad():
+    #     # Create random latent vectors
+    #     z = torch.randn(64, model.latent_dim).to(device)
+    #
+    #     # Decode them into piano roll logits
+    #     logits = model.decode(z)
+    #
+    #     # Apply sigmoid to get probabilities and create binary samples by thresholding
+    #     samples = (torch.sigmoid(logits) > 0.5).float()  # (64, 1, 128, 16)
+    #
+    #     # Save a grid of the generated samples
+    #     sample_grid_path = os.path.join(OUTPUT_DIR, "generated_samples.png")
+    #     vutils.save_image(samples, sample_grid_path, normalize=True)
+    #     print(f"Generated samples saved to {sample_grid_path}")
+    #     dba.visualize_midi(samples[0], title="First Generated Sample")
+    #
     # ==============================================================================
     # 6. Model Evaluation
     # ==============================================================================
     # ----Instatiate the evaluator------
-    evaluator = MusicEvaluator(model, device)
-
-    # compute the metrics
-    metrics = evaluator.evaluate(test_loader, num_batches=10, latent_dim=LATENT_DIM)
-
-    print("Evaluation metrics:")
-    for k, v in metrics.items():
-        print(f"{k}: {v:.4f}")
+    # evaluator = MusicEvaluator(model, device)
+    #
+    # # compute the metrics
+    # metrics = evaluator.evaluate(test_loader, num_batches=10, latent_dim=LATENT_DIM)
+    #
+    # print("Evaluation metrics:")
+    # for k, v in metrics.items():
+    #     print(f"{k}: {v:.4f}")
 
 
 if __name__ == "__main__":

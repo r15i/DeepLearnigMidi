@@ -22,14 +22,14 @@ PIP_CMD := uv pip
 TMUX_SESSION_NAME := preprocessing
 
 # --- rsync Flags ---
-RSYNC_FLAGS := -avzh --delete --progress
-
+# RSYNC_FLAGS := -avzh --delete --progress
+RSYNC_FLAGS := -avzh --progress
 # --- Preprocessing Configuration ---
 LIMIT ?= 1
 SF ?= 50
 
 # --- Training Configuration ---
-EPOCHS ?= 100 
+EPOCHS ?= 50 
 BATCH ?= 256
 
 .PHONY: help setup sync preprocess attach kill-session
@@ -111,10 +111,9 @@ preprocess: clean_local sync
 train : 
 	@echo ">>> Starting remote preprocessing job in tmux session '$(TMUX_SESSION_NAME)'..."
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "tmux new -d -s $(TMUX_SESSION_NAME) ' \
-		cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
-		rm -rf training.log;\
-		time .venv/bin/python main.py -m conv --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
-		# time .venv/bin/python main.py -m res --epochs $(EPOCHS) --batch-size $(BATCH)| tee training.log '"
+	    cd $(REMOTE_BASE_PATH)/$(PROJECT_NAME) && pwd;\
+	    rm -rf training.log;\
+	    time .venv/bin/python main.py -m conv --epochs $(EPOCHS) --batch-size $(BATCH) 2>&1 | tee training.log '"
 	@echo ">>> Job started successfully on remote server."
 	@echo ">>> To view progress, run: make attach"
 	make attach
