@@ -22,11 +22,10 @@ def main():
 
     # --- Paths and Directories ---
     # NOTE: We now point directly to the directory with the preprocessed .pt files.
-    PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed" #point directly to the processed directory
+    PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"  # point directly to the processed directory
     OUTPUT_DIR = "training_output"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(os.path.join(OUTPUT_DIR, "models"), exist_ok=True)
-
 
     # --- Argument Parser Setup ---
     parser = argparse.ArgumentParser(
@@ -36,7 +35,12 @@ def main():
 
     # --- VAE model ---
     parser.add_argument(
-        "-m", "--model", type=str, default="conv", choices=["conv", "res"], help="Tipo di VAE da usare: 'conv' o 'res'."
+        "-m",
+        "--model",
+        type=str,
+        default="conv",
+        choices=["conv", "res"],
+        help="Tipo di VAE da usare: 'conv' o 'res'.",
     )
 
     # --- VAE Training Hyperparameters ---
@@ -76,7 +80,6 @@ def main():
     # Parse the arguments
     args = parser.parse_args()
 
-
     # --- Hyperparameters ---
     # H is a constant based on the MIDI standard, not an argument.
     H = 128
@@ -99,7 +102,9 @@ def main():
     train_size = int(0.8 * len(my_dataset))
     val_size = int(0.1 * len(my_dataset))
     test_size = len(my_dataset) - train_size - val_size
-    train_set, val_set, test_set = random_split(my_dataset, [train_size, val_size, test_size])
+    train_set, val_set, test_set = random_split(
+        my_dataset, [train_size, val_size, test_size]
+    )
 
     train_loader = DataLoader(
         train_set,
@@ -141,11 +146,13 @@ def main():
     print(f"Using device: {device}")
 
     # --- Instantiate the model ---
-    
+
     if args.model == "conv":
         model = md.ConvVAE(latent_dim=LATENT_DIM).to(device)
+        print("\n Loading ConvVAE model...")
     elif args.model == "res":
         model = md.ResVAE(latent_dim=LATENT_DIM).to(device)
+        print("\n Loading ResVAE model...")
     else:
         raise ValueError(f"Unknown model type: {args.model}")
 
@@ -156,9 +163,9 @@ def main():
     # Early Stopping setup
     # ======================================================================
     best_val_loss = float("inf")
-    patience = 10     # numero massimo di epoche senza miglioramento
+    patience = 10  # numero massimo di epoche senza miglioramento
     counter = 0
-    delta = 0.5       # minimo miglioramento richiesto sulla val_loss
+    delta = 0.5  # minimo miglioramento richiesto sulla val_loss
 
     # ==============================================================================
     # 3. Training  & Validation Loop
@@ -234,7 +241,7 @@ def main():
                 # Forward pass
                 x_logits, mu, logvar = model(x)
                 loss, recon, kl = md.vae_loss(x, x_logits, mu, logvar, beta=BETA)
-                
+
                 val_loss += loss.item()
                 val_recon += recon.item()
                 val_kl += kl.item()
@@ -246,13 +253,17 @@ def main():
         val_recons.append(avg_val_recon)
         val_kls.append(avg_val_kl)
 
-        print(f"    Average Val Loss:   {avg_val_loss:.4f} | Avg Recon: {avg_val_recon:.2f} | Avg KL Div: {avg_val_kl:.2f}\n")
+        print(
+            f"    Average Val Loss:   {avg_val_loss:.4f} | Avg Recon: {avg_val_recon:.2f} | Avg KL Div: {avg_val_kl:.2f}\n"
+        )
 
         # --- Early Stopping ---
         if avg_val_loss < best_val_loss - delta:
             best_val_loss = avg_val_loss
             counter = 0
-            model_save_path = os.path.join(OUTPUT_DIR, "models", f"{args.model}_vae_final.pth")
+            model_save_path = os.path.join(
+                OUTPUT_DIR, "models", f"{args.model}_vae_final.pth"
+            )
             torch.save(model.state_dict(), model_save_path)
             print(" New best model saved!")
         else:
@@ -294,16 +305,17 @@ def main():
 
     # Saving the figure
     print(" Saving Losses plot...")
-    
+
     loss_plot_dir = os.path.join(OUTPUT_DIR, "loss_plot")
     os.makedirs(loss_plot_dir, exist_ok=True)
-    plot_save_path = os.path.join(loss_plot_dir,f"{args.model}_loss_plot.png" ) #nome dell'immagine da modificare in base al tipo di training
+    plot_save_path = os.path.join(
+        loss_plot_dir, f"{args.model}_loss_plot.png"
+    )  # nome dell'immagine da modificare in base al tipo di training
     plt.savefig(plot_save_path, dpi=300, bbox_inches="tight")
 
     # ==============================================================================
     # 5. Generate Samples
     # ==============================================================================
-
 
     print("\n Generating new MIDI samples from random noise...")
     model.eval()
@@ -337,8 +349,6 @@ def main():
     print("Evaluation metrics:")
     for k, v in metrics.items():
         print(f"{k}: {v:.4f}")
-
-
 
 
 if __name__ == "__main__":
