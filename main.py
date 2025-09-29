@@ -12,6 +12,7 @@ import argparse
 # Local imports
 import DBAdapters as dba
 import models as md
+from evaluator import MusicEvaluator  
 
 
 def main():
@@ -323,6 +324,19 @@ def main():
 
         # Visualize the first generated sample
         dba.visualize_midi(samples[0], title="First Generated Sample")
+
+    # ==============================================================================
+    # 6. Model Evaluation
+    # ==============================================================================
+    # ----Instatiate the evaluator------
+    evaluator = MusicEvaluator(model, device)
+
+    # compute the metrics
+    metrics = evaluator.evaluate(test_loader, num_batches=10, latent_dim=LATENT_DIM)
+
+    print("Evaluation metrics:")
+    for k, v in metrics.items():
+        print(f"{k}: {v:.4f}")
 
 
 
