@@ -58,6 +58,13 @@ def main():
         help="Learning rate for the Adam optimizer.",
     )
     parser.add_argument(
+        "--lr-kind",
+        type=str, 
+        default="2", 
+        choices=["1","2","3"], 
+        help= "tipo di LR; 1 sta per 10^-2, 2 sta per 10^-3, 3 stra per 10^-4"
+    )
+    parser.add_argument(
         "-ld",
         "--latent-dim",
         type=int,
@@ -262,7 +269,7 @@ def main():
             best_val_loss = avg_val_loss
             counter = 0
             model_save_path = os.path.join(
-                OUTPUT_DIR, "models", f"{args.model}_vae_final.pth"
+                OUTPUT_DIR, "models", f"{args.model}_vae_lr{args.lr_kind}.pth"
             )
             torch.save(model.state_dict(), model_save_path)
             print(" New best model saved!")

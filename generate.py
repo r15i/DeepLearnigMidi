@@ -78,7 +78,7 @@ def tensor_to_midi(piano_roll_tensor, output_path="generation_output.mid", tempo
 
     # Write out the MIDI data
     midi_data.write(output_path)
-    print(f"✅ MIDI file successfully saved to: {output_path}")
+    print(f" MIDI file successfully saved to: {output_path}")
 
 
 def play_midi(file_path):
@@ -86,12 +86,12 @@ def play_midi(file_path):
     Plays a MIDI file using pygame.
     """
     if not PYGAME_AVAILABLE:
-        print("\n⚠️ Pygame not found. Cannot play MIDI file.")
+        print("\n Pygame not found. Cannot play MIDI file.")
         print("   Please install it by running: pip install pygame")
         return
 
     try:
-        print(f"\n▶️ Playing {file_path}...")
+        print(f"\nPlaying {file_path}...")
         pygame.init()
         pygame.mixer.init()
         pygame.mixer.music.load(file_path)
@@ -101,7 +101,7 @@ def play_midi(file_path):
             time.sleep(1)
     except Exception as e:
         print(
-            f"\n❌ Could not play MIDI file. Please ensure your system's audio is configured."
+            f"\n Could not play MIDI file. Please ensure your system's audio is configured."
         )
         print(f"   Error details: {e}")
     finally:
@@ -116,10 +116,19 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--model-path",
+        "-m",
+        "--model",
         type=str,
-        default="training_output/models/vae_final.pth",
-        help="Path to the trained VAE model (.pth) file.",
+        default="conv",
+        choices=["conv", "res"],
+        help="Tipo di VAE da usare: 'conv' o 'res'.",
+    )
+    parser.add_argument(
+        "--lr-kind", 
+        type=str, 
+        default="2", 
+        choices=["1","2","3"], 
+        help= "tipo di LR; 1 sta per 10^-2, 2 sta per 10^-3, 3 stra per 10^-4"
     )
     parser.add_argument(
         "-n",
@@ -150,26 +159,35 @@ def main():
     args = parser.parse_args()
 
     # --- 1. Setup ---
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    LATENT_DIM = args.latent_dim
+ 
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {DEVICE}")
 
-    if not os.path.exists(args.model_path):
-        print(f"❌ Error: Model file not found at '{args.model_path}'")
+    MODEL_PATH = f"training_output/models/{args.model}_vae_lr{args.lr_kind}.pth"
+
+    if not os.path.exists(MODEL_PATH):
+        print(f"❌ Error: Model file not found at '{MODEL_PATH}'")
         return
 
     # --- 2. Load Model ---
-    print(f"Loading model from {args.model_path}...")
-    model = md.ConvVAE(latent_dim=args.latent_dim)
-    model.load_state_dict(torch.load(args.model_path, map_location=device))
-    model.to(device)
+    print(f"Loading model from {MODEL_PATH}...")
+    if args.model == "conv":
+        model = md.ConvVAE(latent_dim=LATENT_DIM).to(DEVICE)
+    elif args.model == "res":
+        model = md.ResVAE(latent_dim=LATENT_DIM).to(DEVICE)
+    else:
+        raise ValueError(f"Unknown model type: {args.model}")
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+    model.to(DEVICE)
     model.eval()  # Set model to evaluation mode
     print("Model loaded successfully.")
 
     # --- 3. Generate Music ---
-    print(f"\n🎶 Generating {args.num_bars} bars of music...")
+    print(f"\n Generating {args.num_bars} bars of music...")
     with torch.no_grad():
         # Create random latent vectors (one for each bar)
-        z = torch.randn(args.num_bars, model.latent_dim).to(device)
+        z = torch.randn(args.num_bars, model.latent_dim).to(DEVICE)
 
         # Decode them into piano roll logits
         logits = model.decode(z)

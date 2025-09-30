@@ -26,15 +26,19 @@ parser.add_argument(
     help="Tipo di VAE da usare: 'conv' o 'res'.",
 )
 parser.add_argument("--latent-dim", type=int, default=32)
+parser.add_argument("--learning-rate", type=float, default=1e-3)
+parser.add_argument("--lr-kind", type=str, default="2", choices=["1","2","3"], help= "tipo di LR; 1 sta per 10^-2, 2 sta per 10^-3, 3 stra per 10^-4")
+
 parser.add_argument("--batch-size", type=int, default=32)
 
 args = parser.parse_args()
 
 # --- Config ---
-MODEL_PATH = f"training_output/models/{args.model}_vae_final.pth"
+MODEL_PATH = f"training_output/models/{args.model}_vae_lr{args.lr_kind}.pth"
 PROCESSED_DIR = "./dataset/MAESTRO_Dataset/processed"
 BATCH_SIZE = args.batch_size
 LATENT_DIM = args.latent_dim
+ 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --- Dataset ---

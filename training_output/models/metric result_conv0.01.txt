@@ -1,0 +1,4 @@
+Evaluation Results:
+Pitch_Wass: 0.0028
+Rhythm_Wass: 0.0316
+DTW: 18.3594
